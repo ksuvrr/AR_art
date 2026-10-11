@@ -1,0 +1,140 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>AR-галерея</title>
+
+  <script src="https://aframe.io/releases/1.5.0/aframe.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/mind-ar@1.2.5/dist/mindar-image-aframe.prod.js"></script>
+
+  <style>
+    /* ВАЖНО: фон только у html. Если задать фон у body, он закроет видео с камеры. */
+    html { height: 100%; background: #000; }
+    body { margin: 0; height: 100%; font-family: sans-serif; }
+
+    #start {
+      position: fixed; inset: 0; z-index: 10;
+      display: flex; flex-direction: column; align-items: center; justify-content: center;
+      padding: 24px; text-align: center; color: #fff; background: #111;
+    }
+    #start h1 { font-size: 26px; margin: 0 0 12px; }
+    #start p  { max-width: 320px; line-height: 1.5; opacity: .8; margin: 0 0 28px; }
+    #start button {
+      font-size: 18px; padding: 14px 36px; border: 0; border-radius: 30px;
+      background: #fff; color: #000; cursor: pointer;
+    }
+    #hint {
+      display: none; position: fixed; left: 0; right: 0; bottom: 24px; z-index: 5;
+      text-align: center; color: #fff; font-size: 15px; text-shadow: 0 0 6px #000;
+      pointer-events: none;
+    }
+  </style>
+</head>
+<body>
+
+  <div id="start">
+    <h1>Оживи картину</h1>
+    <p>Нажмите «Начать», разрешите доступ к камере и наведите телефон на картину.</p>
+    <button id="startBtn">Начать</button>
+  </div>
+  <div id="hint">Наведите камеру на картину</div>
+
+  <a-scene
+    mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiScanning: yes; uiLoading: yes; filterMinCF: 0.0001; filterBeta: 1000;"
+    vr-mode-ui="enabled: false"
+    device-orientation-permission-ui="enabled: false"
+    color-space="sRGB" renderer="colorManagement: true">
+
+    <a-assets timeout="30000">
+      <!-- ПОРЯДОК ЗДЕСЬ = порядок картин в targets.mind.
+           Сейчас: 0 = Деревья, 1 = Над вечным покоем, 2 = Ноктюрн.
+           Если видео перепутаны — просто поменяйте названия файлов местами. -->
+      <video id="video0" src="./trees.mp4"    preload="auto" loop playsinline webkit-playsinline crossorigin="anonymous"></video>
+      <video id="video1" src="./eternal.mp4"  preload="auto" loop playsinline webkit-playsinline crossorigin="anonymous"></video>
+      <video id="video2" src="./nocturne.mp4" preload="auto" loop playsinline webkit-playsinline crossorigin="anonymous"></video>
+    </a-assets>
+
+    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
+
+    <!-- Высота видео подставляется автоматически по пропорциям самого ролика -->
+    <a-entity mindar-image-target="targetIndex: 0" id="target0">
+      <a-video id="plane0" src="#video0" width="1" height="1" position="0 0 0"></a-video>
+    </a-entity>
+    <a-entity mindar-image-target="targetIndex: 1" id="target1">
+      <a-video id="plane1" src="#video1" width="1" height="1" position="0 0 0"></a-video>
+    </a-entity>
+    <a-entity mindar-image-target="targetIndex: 2" id="target2">
+      <a-video id="plane2" src="#video2" width="1" height="1" position="0 0 0"></a-video>
+    </a-entity>
+  </a-scene>
+
+  <script>
+    const scene   = document.querySelector('a-scene');
+    const startEl = document.getElementById('start');
+    const hintEl  = document.getElementById('hint');
+    const videos  = [0, 1, 2].map(i => document.getElementById('video' + i));
+
+    // Плавное появление: меняем прозрачность видео от 0 до 1
+    const FADE_MS = 800; // длительность появления, в миллисекундах
+    const fades = {};
+    function fadeTo(i, to, ms) {
+      const mesh = document.getElementById('plane' + i).getObject3D('mesh');
+      if (!mesh) return;
+      const mat = mesh.material;
+      mat.transparent = true;
+      cancelAnimationFrame(fades[i]);
+      if (!ms) { mat.opacity = to; return; }
+      const from = mat.opacity, t0 = performance.now();
+      const step = now => {
+        const k = Math.min(1, (now - t0) / ms);
+        mat.opacity = from + (to - from) * k;
+        if (k < 1) fades[i] = requestAnimationFrame(step);
+      };
+      fades[i] = requestAnimationFrame(step);
+    }
+
+    [0, 1, 2].forEach(i => {
+      // Подгоняем пропорции плоскости под пропорции видео, чтобы не было сжатия
+      const fit = () => {
+        if (videos[i].videoWidth) {
+          document.getElementById('plane' + i)
+            .setAttribute('height', videos[i].videoHeight / videos[i].videoWidth);
+        }
+      };
+      videos[i].addEventListener('loadedmetadata', fit);
+      fit();
+
+      const target = document.getElementById('target' + i);
+      target.addEventListener('targetFound', () => {
+        fit();
+        hintEl.style.display = 'none';
+        fadeTo(i, 0, 0);          // начинаем с полной прозрачности
+        videos[i].play();
+        fadeTo(i, 1, FADE_MS);    // плавно проявляем
+      });
+      target.addEventListener('targetLost', () => {
+        fadeTo(i, 0, 0);
+        videos[i].pause();
+        hintEl.style.display = 'block';
+      });
+    });
+
+    document.getElementById('startBtn').addEventListener('click', () => {
+      videos.forEach(v => v.play().then(() => v.pause()).catch(() => {}));
+
+      const start = async () => {
+        try {
+          await scene.systems['mindar-image-system'].start();
+          startEl.style.display = 'none';
+          hintEl.style.display = 'block';
+        } catch (e) {
+          alert('Не удалось включить камеру. Проверьте разрешение в настройках браузера.');
+        }
+      };
+      if (scene.hasLoaded) start();
+      else scene.addEventListener('loaded', start);
+    });
+  </script>
+</body>
+</html>
