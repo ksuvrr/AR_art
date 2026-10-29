@@ -87,7 +87,7 @@
   <script>
     (function () {
       var q = new URLSearchParams(location.search);
-      var cf = q.get('cf') || '0.0001', beta = q.get('beta') || '1000';
+      var cf = q.get('cf') || '0.000001', beta = q.get('beta') || '5000';
       document.write('<a-scene mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiScanning: no; uiLoading: no; uiError: no; filterMinCF: ' + cf + '; filterBeta: ' + beta + ';" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false" color-space="sRGB" renderer="colorManagement: true"><a-camera position="0 0 0" look-controls="enabled: false"></a-camera></a-scene>');
     })();
   </script>
