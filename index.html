@@ -27,6 +27,10 @@
     #start { padding: 0; background: #f8f8f8 url('./bg_start.jpg') center / 100% auto no-repeat; }
     #startBtn { position: absolute; background: none; border: 0; padding: 0; opacity: 0;
                 cursor: pointer; -webkit-tap-highlight-color: transparent; }
+    /* запасной вариант, если bg_start.jpg не загрузился: видна обычная кнопка */
+    #start.nobg #startBtn { position: static; width: auto; height: auto; opacity: 1; color: #000;
+      font: 300 18px var(--font); border: 1px solid #000; border-radius: 20px; padding: 6px 28px; }
+    #start.nobg #startBtn::after { content: 'начать'; }
     #hint .big   { font-size: 24px; margin: 0; }
     #hint .line  { width: 1px; height: 26px; background: #000; margin: 14px 0; }
     #hint .small { font-size: 15px; font-weight: 400; line-height: 1.3; max-width: 240px; margin: 0; }
@@ -78,13 +82,15 @@
     <div id="dots"></div>
   </div>
 
-  <a-scene
-    mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiScanning: no; uiLoading: no; uiError: no; filterMinCF: 0.0001; filterBeta: 1000;"
-    vr-mode-ui="enabled: false"
-    device-orientation-permission-ui="enabled: false"
-    color-space="sRGB" renderer="colorManagement: true">
-    <a-camera position="0 0 0" look-controls="enabled: false"></a-camera>
-  </a-scene>
+  <!-- Сцена создаётся скриптом, чтобы можно было подбирать сглаживание прямо в адресе:
+       .../AR_art/?cf=0.00001&beta=100   (без параметров работают значения по умолчанию ниже) -->
+  <script>
+    (function () {
+      var q = new URLSearchParams(location.search);
+      var cf = q.get('cf') || '0.0001', beta = q.get('beta') || '1000';
+      document.write('<a-scene mindar-image="imageTargetSrc: ./targets.mind; autoStart: false; uiScanning: no; uiLoading: no; uiError: no; filterMinCF: ' + cf + '; filterBeta: ' + beta + ';" vr-mode-ui="enabled: false" device-orientation-permission-ui="enabled: false" color-space="sRGB" renderer="colorManagement: true"><a-camera position="0 0 0" look-controls="enabled: false"></a-camera></a-scene>');
+    })();
+  </script>
 
   <script>
     /* ===== НАСТРОЙКИ ===== */
@@ -190,11 +196,15 @@
     const BG = { w: 1117, h: 2428 };                    // размер bg_start.jpg
     const BTN = { x: 400, y: 1858, w: 407, h: 97 };     // где кнопка на картинке
     function placeStart() {
+      if ($('start').classList.contains('nobg')) return;
       const k = innerWidth / BG.w, top = (innerHeight - BG.h * k) / 2;
       Object.assign($('startBtn').style, {
         left: BTN.x * k + 'px', top: top + BTN.y * k + 'px', width: BTN.w * k + 'px', height: BTN.h * k + 'px' });
     }
     placeStart(); addEventListener('resize', placeStart);
+    const bgTest = new Image();
+    bgTest.onerror = () => { $('start').classList.add('nobg'); $('startBtn').removeAttribute('style'); };
+    bgTest.src = './bg_start.jpg';
 
     /* Кнопка «начать» */
     $('startBtn').addEventListener('click', () => {
