@@ -114,6 +114,49 @@
     ];
     /* ===================== */
 
+    /* ===== СГЛАЖИВАНИЕ ПОЛОЖЕНИЯ ВИДЕО =====
+       Видео ставится не прямо на якорь картины, а следует за ним с задержкой.
+       Мелкие дрожания гасятся сильно (SLOW_MS), а настоящее движение телефона
+       отслеживается быстро (FAST_MS). Чем больше SLOW_MS, тем «тяжелее» и спокойнее видео.
+       Подбирать можно прямо в адресе:  .../AR_art/?slow=500&fast=80  */
+    const QS = new URLSearchParams(location.search);
+    const SLOW_MS = +(QS.get('slow') || 400);  // задержка для мелких дрожаний, мс
+    const FAST_MS = +(QS.get('fast') || 80);   // задержка при настоящем движении, мс
+    const MOVE_LO = 0.003, MOVE_HI = 0.04;     // порог сдвига (доля ширины картины)
+    const TURN_LO = 0.003, TURN_HI = 0.05;     // порог поворота (радианы)
+
+    AFRAME.registerComponent('smooth-follow', {
+      schema: { target: { type: 'string' } },
+      init() {
+        const T = AFRAME.THREE;
+        this.src = document.getElementById(this.data.target);
+        this.o = this.el.object3D; this.o.matrixAutoUpdate = false; this.o.visible = false;
+        this.p = new T.Vector3(); this.q = new T.Quaternion(); this.s = new T.Vector3(1, 1, 1);
+        this.np = new T.Vector3(); this.nq = new T.Quaternion(); this.ns = new T.Vector3(1, 1, 1);
+        this.had = false;
+      },
+      tick(time, dt) {
+        const S = this.src.object3D;
+        if (!S.visible) { this.o.visible = false; this.had = false; return; }
+        S.matrix.decompose(this.np, this.nq, this.ns);
+        if (!this.had) {                       // первый кадр: ставим сразу, без задержки
+          this.p.copy(this.np); this.q.copy(this.nq); this.s.copy(this.ns); this.had = true;
+        } else {
+          const move = this.np.distanceTo(this.p) / (this.ns.x || 1);
+          const turn = this.q.angleTo(this.nq);
+          let x = Math.max((move - MOVE_LO) / (MOVE_HI - MOVE_LO), (turn - TURN_LO) / (TURN_HI - TURN_LO));
+          x = Math.min(1, Math.max(0, x)); x = x * x * (3 - 2 * x);
+          const tau = SLOW_MS + (FAST_MS - SLOW_MS) * x;
+          const a = 1 - Math.exp(-(dt || 16) / tau);
+          this.p.lerp(this.np, a); this.q.slerp(this.nq, a); this.s.lerp(this.ns, a);
+        }
+        this.o.matrix.compose(this.p, this.q, this.s);
+        this.o.matrixWorldNeedsUpdate = true;
+        this.o.visible = true;
+      }
+    });
+    /* ======================================== */
+
     const $ = id => document.getElementById(id);
     const scene = document.querySelector('a-scene');
     const videos = [], planes = [], fades = {}, found = new Set();
@@ -161,11 +204,16 @@
       v.setAttribute('playsinline', ''); v.setAttribute('webkit-playsinline', '');
       document.body.appendChild(v); videos.push(v);
 
+      // якорь (только отслеживание) и отдельный «следящий» объект с видео
       const target = document.createElement('a-entity');
+      target.id = 'target' + i;
       target.setAttribute('mindar-image-target', 'targetIndex: ' + i);
+      scene.appendChild(target);
+      const follower = document.createElement('a-entity');
+      follower.setAttribute('smooth-follow', 'target: target' + i);
       const pl = document.createElement(p.shape === 'circle' ? 'a-circle' : 'a-plane');
       pl.setAttribute('material', 'shader: flat; src: #video' + i);
-      target.appendChild(pl); scene.appendChild(target); planes.push(pl);
+      follower.appendChild(pl); scene.appendChild(follower); planes.push(pl);
 
       // подгоняем пропорции плоскости под пропорции видео
       const fit = () => {
