@@ -95,7 +95,7 @@
   <script>
     /* ===== НАСТРОЙКИ ===== */
     const GOAL = 4;           // сколько картин нужно собрать
-    const FADE_MS = 800;      // плавное появление видео
+    const FADE_MS = 500;      // длительность проявления анимации, мс
     const WAIT_DELAY = 3000;  // через сколько мс поиска показать «Мысль еще формируется»
     const SAY_MS = 2200;      // сколько висит «Мысль проявлена»
     const FINAL_MS = 4000;    // сколько висит «Все мысли проявлены!»
@@ -172,7 +172,8 @@
       const from = mat.opacity, t0 = performance.now();
       const step = now => {
         const k = Math.min(1, (now - t0) / ms);
-        mat.opacity = from + (to - from) * k;
+        const e = k * k * (3 - 2 * k);           // плавный старт и плавный финиш
+        mat.opacity = from + (to - from) * e;
         if (k < 1) fades[i] = requestAnimationFrame(step);
       };
       fades[i] = requestAnimationFrame(step);
@@ -202,6 +203,17 @@
         dbgBox.textContent = dbgBox.textContent.split('\n').filter(l => !l.startsWith('VIDEO ')).join('\n');
         dbgBox.textContent = 'VIDEO ' + st + '\n' + dbgBox.textContent;
       }, 700);
+    }
+
+    /* Проявление начинается, когда видео реально пошло, а не раньше:
+       иначе фаза «проявления» уходит на пустой кадр и анимация появляется рывком */
+    const revealToken = {};
+    function revealWhenPlaying(i, v) {
+      const token = revealToken[i] = (revealToken[i] || 0) + 1;
+      const go = () => { if (revealToken[i] === token) { revealToken[i]++; fadeTo(i, 1, FADE_MS); } };
+      if (!v.paused && v.readyState >= 3) { go(); return; }
+      v.addEventListener('playing', go, { once: true });
+      setTimeout(go, 2500);                      // запасной вариант, если событие не пришло
     }
 
     function renderDots() {
@@ -256,7 +268,7 @@
 
       target.addEventListener('targetFound', () => {
         visible++; fit(); setWait(false);
-        fadeTo(i, 0, 0); playSafe(v); fadeTo(i, 1, FADE_MS);
+        fadeTo(i, 0, 0); playSafe(v); revealWhenPlaying(i, v);
         if (!found.has(i)) {
           found.add(i); renderDots();
           if (found.size >= GOAL) say('Все мысли<br>проявлены!', FINAL_MS);
@@ -265,7 +277,7 @@
       });
       target.addEventListener('targetLost', () => {
         visible = Math.max(0, visible - 1);
-        fadeTo(i, 0, 0); v.pause();
+        revealToken[i] = (revealToken[i] || 0) + 1; fadeTo(i, 0, 0); v.pause();
         if (!visible && !sayOn) setWait(true);
       });
     });
