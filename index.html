@@ -272,8 +272,8 @@
     renderDots();
 
     /* Невидимая кнопка ставится ровно поверх нарисованной кнопки «начать» на картинке */
-    const BG = { w: 838, h: 1821 };                     // размер bg_start.jpg
-    const BTN = { x: 270, y: 1645, w: 310, h: 90 };     // где кнопка «Начать» на картинке
+    const BG = { w: 1117, h: 2428 };                    // размер bg_start.jpg
+    const BTN = { x: 400, y: 1858, w: 407, h: 97 };     // где кнопка на картинке
     function placeStart() {
       if ($('start').classList.contains('nobg')) return;
       const k = innerWidth / BG.w, top = (innerHeight - BG.h * k) / 2;
